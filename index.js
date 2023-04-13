@@ -8,9 +8,7 @@ const requestIp = require("request-ip");
 const PORT = 3000;
 const MAX_TOKENS = process.env.MAX_TOKENS || 512;
 
-// const LIMITER_MSG = "Too many requests from this IP, please try again later.";
-const LIMITER_MSG =
-  "当前访问量过多，请稍后再试。如有需要请联系作者微信号：lomo-pis。";
+const LIMITER_MSG = "Too many requests from this IP, please try again later.";
 const CHAT_LIMITER = process.env.CHAT_LIMITER || 9;
 const IMAGE_LIMITER = process.env.IMAGE_LIMITER || 3;
 
@@ -32,7 +30,7 @@ app.get("/hello", async (req, res) => {
 });
 
 const chatLimiter = rateLimit({
-  windowMs: 3 * 60 * 60 * 1000, // 3 hoour
+  windowMs: 3 * 60 * 60 * 1000, // 3 hour
   max: CHAT_LIMITER,
   keyGenerator: (request, response) => {
     console.log(request.clientIp, request.body.messages[request.body.messages.length-1].content);
@@ -67,30 +65,8 @@ app.post("/v1/chat/completions", chatLimiter, async (req, res) => {
   }
 });
 
-app.post("/v1/completions", chatLimiter, async (req, res) => {
-  try {
-    const tokensLength = req.body.messages.reduce((acc, cur) => {
-      const length = encode(cur.content).length;
-      return acc + length;
-    }, 0);
-    if (tokensLength > MAX_TOKENS) {
-      res.status(500).send({
-        error: {
-          message: `max_tokens is limited: ${MAX_TOKENS}`,
-        },
-      });
-    }
-    const openaiRes = await openaiClient.createCompletion(req.body, {
-      responseType: "stream",
-    });
-    openaiRes.data.pipe(res);
-  } catch (error) {
-    res.end();
-  }
-});
-
 const imageLimiter = rateLimit({
-  windowMs: 3 * 60 * 60 * 1000, // 3 hoour
+  windowMs: 3 * 60 * 60 * 1000, // 3 hour
   max: IMAGE_LIMITER,
   keyGenerator: (request, response) => {
     console.log(request.clientIp, `image->${request.body.prompt}`);
