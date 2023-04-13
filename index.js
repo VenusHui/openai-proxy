@@ -67,6 +67,28 @@ app.post("/v1/chat/completions", chatLimiter, async (req, res) => {
   }
 });
 
+app.post("/v1/completions", chatLimiter, async (req, res) => {
+  try {
+    const tokensLength = req.body.messages.reduce((acc, cur) => {
+      const length = encode(cur.content).length;
+      return acc + length;
+    }, 0);
+    if (tokensLength > MAX_TOKENS) {
+      res.status(500).send({
+        error: {
+          message: `max_tokens is limited: ${MAX_TOKENS}`,
+        },
+      });
+    }
+    const openaiRes = await openaiClient.createCompletion(req.body, {
+      responseType: "stream",
+    });
+    openaiRes.data.pipe(res);
+  } catch (error) {
+    res.end();
+  }
+});
+
 const imageLimiter = rateLimit({
   windowMs: 3 * 60 * 60 * 1000, // 3 hoour
   max: IMAGE_LIMITER,
