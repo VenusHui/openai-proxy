@@ -1,101 +1,18 @@
-const bodyParser = require("body-parser");
-const express = require("express");
-const rateLimit = require("express-rate-limit");
-const { Configuration, OpenAIApi } = require("openai");
-const { encode } = require("gpt-3-encoder");
-const requestIp = require("request-ip");
+const express = require('express')
+const {
+  createProxyMiddleware
+} = require('http-proxy-middleware');
+const app = express()
+const port = 3000
 
-const PORT = 3000;
-const MAX_TOKENS = process.env.MAX_TOKENS || 512;
-
-const LIMITER_MSG = "Too many requests from this IP, please try again later.";
-const CHAT_LIMITER = process.env.CHAT_LIMITER || 9;
-const IMAGE_LIMITER = process.env.IMAGE_LIMITER || 3;
-
-const app = express();
-
-app.use(requestIp.mw());
-app.use(bodyParser.json());
-
-app.set("trust proxy", true);
-
-const openaiConfig = new Configuration({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-const openaiClient = new OpenAIApi(openaiConfig);
-
-app.get("/hello", async (req, res) => {
-  res.send("world");
-});
-
-const chatLimiter = rateLimit({
-  windowMs: 3 * 60 * 60 * 1000, // 3 hour
-  max: CHAT_LIMITER,
-  keyGenerator: (request, response) => {
-    console.log(request.clientIp, request.body.messages[request.body.messages.length-1].content);
-    return request.clientIp;
-  },
-  message: {
-    error: {
-      message: LIMITER_MSG,
-    },
-  },
-});
-
-app.post("/v1/chat/completions", chatLimiter, async (req, res) => {
-  try {
-    const tokensLength = req.body.messages.reduce((acc, cur) => {
-      const length = encode(cur.content).length;
-      return acc + length;
-    }, 0);
-    if (tokensLength > MAX_TOKENS) {
-      res.status(500).send({
-        error: {
-          message: `max_tokens is limited: ${MAX_TOKENS}`,
-        },
-      });
-    }
-    const openaiRes = await openaiClient.createChatCompletion(req.body, {
-      responseType: "stream",
-    });
-    openaiRes.data.pipe(res);
-  } catch (error) {
-    res.end();
+app.use('/', createProxyMiddleware({
+  target: 'https://api.openai.com',
+  changeOrigin: true,
+  onProxyRes: function (proxyRes, req, res) {
+    proxyRes.headers['Access-Control-Allow-Origin'] = '*';
   }
-});
+}));
 
-const imageLimiter = rateLimit({
-  windowMs: 3 * 60 * 60 * 1000, // 3 hour
-  max: IMAGE_LIMITER,
-  keyGenerator: (request, response) => {
-    console.log(request.clientIp, `image->${request.body.prompt}`);
-    return request.clientIp;
-  },
-  message: {
-    error: {
-      message: LIMITER_MSG,
-    },
-  },
-});
-
-app.post("/v1/images/generations", imageLimiter, async (req, res) => {
-  try {
-    const tokensLength = encode(req.body.prompt).length;
-    if (tokensLength > MAX_TOKENS) {
-      res.status(500).send({
-        error: {
-          message: `max_tokens is limited: ${MAX_TOKENS}`,
-        },
-      });
-    }
-    const openaiRes = await openaiClient.createImage(req.body);
-    res.send(openaiRes.data);
-  } catch (error) {
-    res.status(500).send(error);
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
-});
+app.listen(port, () => {
+  console.log(`Example app listening at http://localhost:${port}`)
+})
